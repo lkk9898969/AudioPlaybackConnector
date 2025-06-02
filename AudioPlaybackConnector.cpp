@@ -8,6 +8,7 @@ winrt::fire_and_forget ConnectDevice(DevicePicker, std::wstring_view);
 void SetupDevicePicker();
 void SetupSvgIcon();
 void UpdateNotifyIcon();
+void ShowInitialToastNotification();
 
 int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 	_In_opt_ HINSTANCE hPrevInstance,
@@ -105,6 +106,8 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 	LOG_LAST_ERROR_IF(WM_TASKBAR_CREATED == 0);
 
 	PostMessageW(g_hWnd, WM_CONNECTDEVICE, 0, 0);
+
+	ShowInitialToastNotification();
 
 	MSG msg;
 	while (GetMessageW(&msg, nullptr, 0, 0))
@@ -513,5 +516,63 @@ void UpdateNotifyIcon()
 		{
 			LOG_LAST_ERROR();
 		}
+	}
+}
+
+void ShowInitialToastNotification()
+{
+	try
+	{
+		std::wstring title = _(L"AudioPlaybackConnector");
+		std::wstring message = _(L"Application has started and is running in the notification area.");
+
+		std::wstring toastXmlString =
+			L"<toast activationType=\"protocol\" launch=\"audioplaybackconnector:show\">" 
+			L"<visual>"
+			L"<binding template=\"ToastGeneric\">"
+			L"<text>" + title + L"</text>"
+			L"<text>" + message + L"</text>"
+			L"</binding>"
+			L"</visual>"
+			L"</toast>";
+
+		XmlDocument toastXml;
+		toastXml.LoadXml(toastXmlString);
+
+		ToastNotifier notifier{ nullptr };
+		try {
+			notifier = ToastNotificationManager::CreateToastNotifier();
+		}
+		catch (winrt::hresult_error) {
+			LOG_CAUGHT_EXCEPTION();
+			wchar_t exePath[MAX_PATH];
+			GetModuleFileNameW(NULL, exePath, MAX_PATH);
+			std::wstring appId = exePath;
+			try {
+				notifier = ToastNotificationManager::CreateToastNotifier(appId);
+			}
+			catch (winrt::hresult_error) {
+				LOG_CAUGHT_EXCEPTION(); 
+			}
+		}
+
+		if (!notifier)
+		{
+			return;
+		}
+
+		ToastNotification toast(toastXml);
+
+		using namespace std::chrono;
+		toast.ExpirationTime(winrt::Windows::Foundation::DateTime::clock::now() + seconds(5));
+
+		notifier.Show(toast);
+	}
+	catch (winrt::hresult_error)
+	{
+		
+	}
+	catch (std::exception)
+	{
 	}
 }
