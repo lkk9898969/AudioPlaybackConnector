@@ -13,7 +13,11 @@ namespace fs = std::filesystem;
 
 constexpr UINT WM_NOTIFYICON = WM_APP + 1;
 constexpr UINT WM_CONNECTDEVICE = WM_APP + 2;
+constexpr UINT WM_SHOW_DEVICEPICKER_FROM_OTHER_INSTANCE = WM_APP + 3;
 
+const WCHAR UNIQUE_MUTEX_NAME[] = L"{019730ef-fcc8-7f5a-94b3-8b77d764a65f}";
+
+HANDLE g_hMutex = nullptr;
 HINSTANCE g_hInst;
 HWND g_hWnd;
 HWND g_hWndXaml;

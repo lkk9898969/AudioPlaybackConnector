@@ -20,6 +20,31 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 
 	g_hInst = hInstance;
 
+	g_hMutex = CreateMutexW(NULL, TRUE, UNIQUE_MUTEX_NAME);
+	if (g_hMutex == NULL)
+	{
+		TaskDialog(nullptr, nullptr, _(L"Error"), nullptr, _(L"Could not create mutex. Application will exit."), TDCBF_OK_BUTTON, TD_ERROR_ICON, nullptr);
+		return EXIT_FAILURE;
+	}
+
+	if (GetLastError() == ERROR_ALREADY_EXISTS)
+	{
+		CloseHandle(g_hMutex); 
+		g_hMutex = NULL;       
+
+		HWND hExistingWnd = FindWindowW(L"AudioPlaybackConnector", nullptr); 
+		if (hExistingWnd)
+		{
+			SetForegroundWindow(hExistingWnd);
+			PostMessageW(hExistingWnd, WM_SHOW_DEVICEPICKER_FROM_OTHER_INSTANCE, 0, 0);
+		}
+		else
+		{
+			TaskDialog(nullptr, nullptr, _(L"Information"), nullptr, _(L"Another instance is running, but its window could not be found."), TDCBF_OK_BUTTON, TD_WARNING_ICON, nullptr);
+		}
+		return EXIT_SUCCESS;
+	}
+
 	winrt::init_apartment();
 
 	bool supported = false;
@@ -117,7 +142,48 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			SaveSettings();
 		}
 		Shell_NotifyIconW(NIM_DELETE, &g_nid);
+
+		if (g_hMutex)
+		{
+			ReleaseMutex(g_hMutex);
+			CloseHandle(g_hMutex);
+			g_hMutex = NULL;
+		}
+
 		PostQuitMessage(0);
+		break;
+	case WM_SHOW_DEVICEPICKER_FROM_OTHER_INSTANCE:
+	{
+		using namespace winrt::Windows::UI::Popups;
+		RECT iconRect;
+		HRESULT hr = Shell_NotifyIconGetRect(&g_niid, &iconRect);
+		if (FAILED(hr))
+		{
+			LOG_HR(hr);
+			ClientToScreen(hWnd, reinterpret_cast<POINT*>(&iconRect.left));
+			ClientToScreen(hWnd, reinterpret_cast<POINT*>(&iconRect.right));
+		}
+
+		auto dpi = GetDpiForWindow(hWnd);
+		Rect rect = {
+			static_cast<float>(iconRect.left * USER_DEFAULT_SCREEN_DPI / dpi),
+			static_cast<float>(iconRect.top * USER_DEFAULT_SCREEN_DPI / dpi),
+			static_cast<float>((iconRect.right - iconRect.left) * USER_DEFAULT_SCREEN_DPI / dpi),
+			static_cast<float>((iconRect.bottom - iconRect.top) * USER_DEFAULT_SCREEN_DPI / dpi)
+		};
+		if (IsRectEmpty(&iconRect) || FAILED(hr)) { 
+			rect = { 100.0f, 100.0f, 300.0f, 400.0f }; 
+		}
+
+		SetWindowPos(hWnd, HWND_TOPMOST, 0, 0, GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN), SWP_HIDEWINDOW); 
+		ShowWindow(hWnd, SW_SHOW); 
+		SetForegroundWindow(hWnd); 
+
+		if (g_devicePicker)
+		{
+			g_devicePicker.Show(rect, Placement::Above);
+		}
+	}
 		break;
 	case WM_SETTINGCHANGE:
 		if (lParam && CompareStringOrdinal(reinterpret_cast<LPCWCH>(lParam), -1, L"ImmersiveColorSet", -1, TRUE) == CSTR_EQUAL)
