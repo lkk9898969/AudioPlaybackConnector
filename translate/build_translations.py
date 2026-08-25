@@ -178,7 +178,7 @@ def write_rc(out_path: Path, locales) -> None:
         lines.append(f"LANGUAGE {lang}, {sublang}")
         lines.append(f'1 YMO "{locale}.ymo"')
         lines.append("")
-    out_path.write_text("\n".join(lines), encoding="utf-8")
+    out_path.write_text("\n".join(lines), encoding="utf-16")
 
 
 def iter_source_strings(root: Path):
