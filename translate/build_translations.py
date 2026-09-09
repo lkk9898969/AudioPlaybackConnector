@@ -222,28 +222,38 @@ def main() -> int:
         unique = {text for text, _, _ in found}
         print(f"{len(unique)} distinct translatable string(s) across "
               f"{len(found)} call site(s).\n")
-        absent_total = 0
+        gaps_total = 0
         for po in po_files:
-            known = {key: translation for key, translation, _ in parse_po_all(po)}
+            entries = list(parse_po_all(po))
+            known = {key: translation for key, translation, _ in entries}
+            fuzzy = {key for key, _, flags in entries if "fuzzy" in flags}
             translated = {key for key, _ in parse_po(po)}
 
             # Absent from the catalogue is a gap someone has to fill. Present but
             # deliberately left empty (the app name, for one) is a decision, not a
-            # gap, so it must not be reported the same way.
+            # gap, so it must not be reported the same way. A fuzzy entry has a
+            # draft msgstr but parse_po drops it, so the runtime has nothing --
+            # that is a gap too, and it must fail --check like an absent key.
             absent = [(t, f, n) for t, f, n in found if t not in known]
-            empty = sorted({t for t, _, _ in found if t in known and not known[t]})
+            empty = sorted({t for t, _, _ in found
+                            if t in known and not known[t] and t not in fuzzy})
+            fuzzy_used = sorted({t for t, _, _ in found if t in fuzzy})
 
             print(f"{po.name}: {len(translated & unique)}/{len(unique)} translated")
             if absent:
                 print(f"  missing from the catalogue ({len(absent)}):")
                 for text, fname, lineno in absent:
                     print(f"    {fname}:{lineno}  {text!r}")
+            if fuzzy_used:
+                print(f"  fuzzy, not compiled -- needs review ({len(fuzzy_used)}):")
+                for text in fuzzy_used:
+                    print(f"    {text!r}")
             if empty:
                 print(f"  present but intentionally untranslated ({len(empty)}):")
                 for text in empty:
                     print(f"    {text!r}")
-            absent_total += len(absent)
-        return 1 if absent_total else 0
+            gaps_total += len(absent) + len(fuzzy_used)
+        return 1 if gaps_total else 0
 
     out_dir.mkdir(parents=True, exist_ok=True)
     locales = []
